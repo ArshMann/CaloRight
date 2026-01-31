@@ -30,14 +30,15 @@ caloright/
 
 ---
 
-## Local Development (Early Setup)
+## Local Development
 
-> Full setup instructions will be added as the project is built.
-
-High-level steps:
-1. Clone the repository
-2. Start local services (database, API, web)
-3. Access the web app in the browser
+>Clone repo
+>npm install in apps/api and apps/web
+>Copy .env.example → .env
+>Fill env vars
+>docker compose up -d
+>npx prisma migrate deploy && npx prisma db seed
+>npm run dev
 
 ---
 
