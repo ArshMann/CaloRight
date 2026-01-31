@@ -25,14 +25,15 @@ enum SourceType {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  foods        Food[]
-  dailyLogs    DailyLog[]
-  recipes      Recipe[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  foods         Food[]
+  dailyLogs     DailyLog[]
+  recipes       Recipe[]
+  refreshTokens RefreshToken[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Food {
@@ -119,4 +120,17 @@ model RecipeItem {
   @@unique([recipeId, foodId])
   @@index([recipeId])
   @@index([foodId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
