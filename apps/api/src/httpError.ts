@@ -4,7 +4,9 @@ export type ErrorCode =
   | "VALIDATION_ERROR"
   | "EMAIL_ALREADY_EXISTS"
   | "INVALID_CREDENTIALS"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "FORBIDDEN"
+  | "NOT_FOUND";
 
 export function sendError(
   res: Response,

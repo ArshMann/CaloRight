@@ -4,7 +4,10 @@ import cors from "cors";
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
-import { authRouter } from "./routes/auth";import cookieParser from "cookie-parser";
+import { authRouter } from "./routes/auth";
+import cookieParser from "cookie-parser";
+import { foodsRouter } from "./routes/foods";
+
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaPg(pool)
@@ -40,6 +43,7 @@ app.get("/debug/foods", async (_req, res) => {
 });
 
 app.use("/auth", authRouter);
+app.use("/foods", foodsRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
