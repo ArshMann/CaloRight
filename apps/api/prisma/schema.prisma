@@ -1,0 +1,122 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACKS
+}
+
+enum SourceType {
+  FOOD
+  RECIPE
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  foods        Food[]
+  dailyLogs    DailyLog[]
+  recipes      Recipe[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Food {
+  id              String       @id @default(cuid())
+  name            String
+  brand           String?
+  caloriesPer100g Decimal      @db.Decimal(10, 2)
+  proteinPer100g  Decimal      @db.Decimal(10, 2)
+  carbsPer100g    Decimal      @db.Decimal(10, 2)
+  fatPer100g      Decimal      @db.Decimal(10, 2)
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id])
+  logEntries      LogEntry[]
+  recipeItems     RecipeItem[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([name])
+  @@index([userId])
+  @@index([userId, name])
+}
+
+model DailyLog {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  date      DateTime   @db.Date
+  entries   LogEntry[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model LogEntry {
+  id         String     @id @default(cuid())
+  dailyLogId String
+  dailyLog   DailyLog   @relation(fields: [dailyLogId], references: [id])
+  mealType   MealType
+  sourceType SourceType
+  foodId     String?
+  food       Food?      @relation(fields: [foodId], references: [id])
+  recipeId   String?
+  recipe     Recipe?    @relation(fields: [recipeId], references: [id])
+  grams      Decimal    @db.Decimal(10, 2)
+  calories   Decimal    @db.Decimal(10, 2)
+  protein    Decimal    @db.Decimal(10, 2)
+  carbs      Decimal    @db.Decimal(10, 2)
+  fat        Decimal    @db.Decimal(10, 2)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([dailyLogId, mealType])
+  @@index([sourceType])
+  @@index([foodId])
+  @@index([recipeId])
+}
+
+model Recipe {
+  id          String       @id @default(cuid())
+  name        String
+  entries     LogEntry[]
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  servings    Int
+  recipeItems RecipeItem[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([name])
+  @@index([userId])
+  @@index([userId, name])
+}
+
+model RecipeItem {
+  id       String  @id @default(cuid())
+  recipeId String
+  recipe   Recipe  @relation(fields: [recipeId], references: [id])
+  foodId   String
+  food     Food    @relation(fields: [foodId], references: [id])
+  grams    Decimal @db.Decimal(10, 2)
+
+  @@unique([recipeId, foodId])
+  @@index([recipeId])
+  @@index([foodId])
+}
