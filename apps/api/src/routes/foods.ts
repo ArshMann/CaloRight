@@ -20,14 +20,19 @@ foodsRouter.get("/", requireAuth, async (req: AuthedRequest, res) => {
   };
 
   if (query) {
-    whereClause.AND = [
-      {
-        OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { brand: { contains: query, mode: "insensitive" } },
-        ],
-      },
-    ];
+    const tokens = query
+      .toLowerCase()
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 5); // cap to avoid crazy queries
+
+    whereClause.AND = tokens.map((t) => ({
+      OR: [
+        { name: { contains: t, mode: "insensitive" } },
+        { brand: { contains: t, mode: "insensitive" } },
+      ],
+    }));
   }
 
   const foods = await prisma.food.findMany({
