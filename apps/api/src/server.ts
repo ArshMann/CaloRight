@@ -5,9 +5,11 @@ import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
 import { authRouter } from "./routes/auth";
-import cookieParser from "cookie-parser";
 import { foodsRouter } from "./routes/foods";
+import { dailyLogsRouter } from "./routes/dailyLogs";
+import { logEntriesRouter } from "./routes/logEntries";
 
+import cookieParser from "cookie-parser";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaPg(pool)
@@ -18,32 +20,33 @@ const corsOrigin = process.env.CORS_ORIGIN ?? "http://localhost:5173";
 
 const app = express();
 
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (origin === "http://localhost:5173") return cb(null, true);
+    if (origin === "http://127.0.0.1:5173") return cb(null, true);
+    return cb(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions)); // IMPORTANT: regex, not "*"
+
 app.use(express.json());
-app.use(
-    cors({
-        origin: corsOrigin,
-        credentials: true
-    })
-);
 app.use(cookieParser());
 
 app.get("/health", (_req, res) => {
     res.json({ ok: true });
 });
 
-// TEMP: dev-only endpoint, remove after auth
-app.get("/debug/foods", async (_req, res) => {
-    const foods = await prisma.food.findMany({
-      take: 10,
-      orderBy: {
-        name: 'asc',
-      },
-    })
-    res.json(foods);
-});
-
 app.use("/auth", authRouter);
 app.use("/foods", foodsRouter);
+app.use("/daily-logs", dailyLogsRouter);
+app.use("/daily-logs", logEntriesRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
