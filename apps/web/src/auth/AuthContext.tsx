@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function register(email: string, password: string) {
-    // Minimal: register then login
+    // register then login
     await apiRequest("/auth/register", { method: "POST", body: { email, password }, retryOn401: false });
     await login(email, password);
   }
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // This is the key: make API calls that retry once after refresh on 401
+  // Make API calls that retry once after refresh on 401
   async function authedRequest<T>(
     path: string,
     opts?: { method?: any; body?: any }

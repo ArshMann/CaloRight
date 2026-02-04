@@ -1,0 +1,2120 @@
+Dashboard.tsx 1:
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import type { Food, FoodsResponse } from "../lib/foodsApi";
+import type { TodayLogResponse } from "../lib/dailyLogsApi";
+import "./Dashboard.css";
+
+type MealType = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACKS";
+const MEALS: MealType[] = ["BREAKFAST", "LUNCH", "DINNER", "SNACKS"];
+
+function emptyTotals() {
+  return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+function fmtMealTitle(meal: MealType) {
+  if (meal === "BREAKFAST") return "Breakfast";
+  if (meal === "LUNCH") return "Lunch";
+  if (meal === "DINNER") return "Dinner";
+  return "Snacks";
+}
+
+function MacroPill(props: { label: string; value: number | string; unit?: string }) {
+  return (
+    <div className="pill">
+      <div className="pillLabel">{props.label}</div>
+      <div className="pillValue">
+        {props.value}
+        {props.unit ? <span className="pillUnit"> {props.unit}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function InlineError(props: { text: string }) {
+  return <div className="alert alertError">{props.text}</div>;
+}
+
+function InlineInfo(props: { text: string }) {
+  return <div className="alert alertInfo">{props.text}</div>;
+}
+
+function Badge(props: { text: string; tone?: "neutral" | "green" | "blue" }) {
+  return <span className={`badge ${props.tone ?? "neutral"}`}>{props.text}</span>;
+}
+
+function Button(props: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  variant?: "primary" | "ghost" | "danger";
+  type?: "button" | "submit";
+}) {
+  return (
+    <button
+      type={props.type ?? "button"}
+      className={`btn ${props.variant ?? "primary"}`}
+      onClick={props.onClick}
+      disabled={props.disabled}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+function IconButton(props: {
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  variant?: "ghost" | "danger";
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`iconBtn ${props.variant ?? "ghost"}`}
+      aria-label={props.label}
+      onClick={props.onClick}
+      disabled={props.disabled}
+      title={props.label}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; hint?: string }) {
+  const { label, hint, id, ...rest } = props;
+  const inputId = id ?? (label ? `inp_${label.replace(/\s+/g, "_")}` : undefined);
+
+  return (
+    <label className="field" htmlFor={inputId}>
+      {label ? <span className="fieldLabel">{label}</span> : null}
+      <input className="input" id={inputId} {...rest} />
+      {hint ? <span className="fieldHint">{hint}</span> : null}
+    </label>
+  );
+}
+
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string }) {
+  const { label, id, children, ...rest } = props;
+  const selectId = id ?? (label ? `sel_${label.replace(/\s+/g, "_")}` : undefined);
+
+  return (
+    <label className="field" htmlFor={selectId}>
+      {label ? <span className="fieldLabel">{label}</span> : null}
+      <select className="select" id={selectId} {...rest}>
+        {children}
+      </select>
+    </label>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+export default function Dashboard() {
+  const { user, logout, authedRequest } = useAuth();
+
+  // ---------- Foods search ----------
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+
+  const [foods, setFoods] = useState<Food[]>([]);
+  const [foodsLoading, setFoodsLoading] = useState(false);
+  const [foodsError, setFoodsError] = useState<string | null>(null);
+
+  // ---------- Create food ----------
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [brand, setBrand] = useState("");
+  const [calories, setCalories] = useState("");
+  const [protein, setProtein] = useState("");
+  const [carbs, setCarbs] = useState("");
+  const [fat, setFat] = useState("");
+
+  // ---------- Today log ----------
+  const [today, setToday] = useState<TodayLogResponse["log"] | null>(null);
+  const [todayLoading, setTodayLoading] = useState(false);
+  const [todayError, setTodayError] = useState<string | null>(null);
+
+  // ---------- Logging entry ----------
+  const [logMealType, setLogMealType] = useState<MealType>("LUNCH");
+  const [gramsByFoodId, setGramsByFoodId] = useState<Record<string, string>>({});
+  const [logError, setLogError] = useState<string | null>(null);
+  const [logLoadingFoodId, setLogLoadingFoodId] = useState<string | null>(null);
+
+  // ---------- Deleting entry ----------
+  const [deleteLoadingEntryId, setDeleteLoadingEntryId] = useState<string | null>(null);
+
+  // ---------- Derived memo helpers ----------
+  const todayByMeal = useMemo(() => {
+    if (!today) return null;
+
+    const entriesByMeal = {
+      BREAKFAST: today.entries.filter((e) => e.mealType === "BREAKFAST"),
+      LUNCH: today.entries.filter((e) => e.mealType === "LUNCH"),
+      DINNER: today.entries.filter((e) => e.mealType === "DINNER"),
+      SNACKS: today.entries.filter((e) => e.mealType === "SNACKS"),
+    } satisfies Record<MealType, typeof today.entries>;
+
+    const totalsByMeal = {
+      BREAKFAST: today.meals?.BREAKFAST ?? emptyTotals(),
+      LUNCH: today.meals?.LUNCH ?? emptyTotals(),
+      DINNER: today.meals?.DINNER ?? emptyTotals(),
+      SNACKS: today.meals?.SNACKS ?? emptyTotals(),
+    } satisfies Record<MealType, ReturnType<typeof emptyTotals>>;
+
+    return { entriesByMeal, totalsByMeal };
+  }, [today]);
+
+  // ---------- API calls ----------
+  async function loadFoods() {
+    setFoodsLoading(true);
+    setFoodsError(null);
+    try {
+      const qs = debouncedQuery ? `?query=${encodeURIComponent(debouncedQuery)}` : "";
+      const data = await authedRequest<FoodsResponse>(`/foods${qs}`);
+      setFoods(data.foods);
+    } catch (e: any) {
+      setFoodsError(e?.message ?? "Failed to load foods");
+    } finally {
+      setFoodsLoading(false);
+    }
+  }
+
+  async function loadToday() {
+    setTodayLoading(true);
+    setTodayError(null);
+    try {
+      const data = await authedRequest<TodayLogResponse>("/daily-logs/today");
+      setToday(data.log);
+    } catch (e: any) {
+      setTodayError(e?.message ?? "Failed to load today log");
+    } finally {
+      setTodayLoading(false);
+    }
+  }
+
+  async function addFoodToToday(foodId: string) {
+    setLogError(null);
+
+    const gramsStr = (gramsByFoodId[foodId] ?? "").trim();
+    const grams = Number(gramsStr);
+
+    if (!gramsStr || Number.isNaN(grams) || grams <= 0) {
+      setLogError("Enter grams > 0 before adding.");
+      return;
+    }
+
+    setLogLoadingFoodId(foodId);
+    try {
+      let logId = today?.id;
+      if (!logId) {
+        const data = await authedRequest<{ log: { id: string } }>("/daily-logs/today");
+        logId = data.log.id;
+        await loadToday();
+      }
+
+      await authedRequest(`/daily-logs/${logId}/entries`, {
+        method: "POST",
+        body: { foodId, grams, mealType: logMealType },
+      });
+
+      setGramsByFoodId((prev) => {
+        const copy = { ...prev };
+        delete copy[foodId];
+        return copy;
+      });
+
+      await loadToday();
+    } catch (e: any) {
+      setLogError(e?.message ?? "Failed to add entry");
+    } finally {
+      setLogLoadingFoodId(null);
+    }
+  }
+
+  async function deleteEntry(entryId: string) {
+    if (!today) return;
+    setDeleteLoadingEntryId(entryId);
+    try {
+      await authedRequest(`/daily-logs/${today.id}/entries/${entryId}`, { method: "DELETE" });
+      await loadToday();
+    } finally {
+      setDeleteLoadingEntryId(null);
+    }
+  }
+
+  async function createFood() {
+    setCreateError(null);
+
+    const payload = {
+      name: name.trim(),
+      brand: brand.trim() ? brand.trim() : null,
+      caloriesPer100g: Number(calories),
+      proteinPer100g: Number(protein),
+      carbsPer100g: Number(carbs),
+      fatPer100g: Number(fat),
+    };
+
+    if (!payload.name) return setCreateError("Name is required.");
+    if (
+      [payload.caloriesPer100g, payload.proteinPer100g, payload.carbsPer100g, payload.fatPer100g].some((n) =>
+        Number.isNaN(n)
+      )
+    ) {
+      return setCreateError("All macros must be numbers.");
+    }
+
+    setCreating(true);
+    try {
+      await authedRequest("/foods", { method: "POST", body: payload });
+
+      setName("");
+      setBrand("");
+      setCalories("");
+      setProtein("");
+      setCarbs("");
+      setFat("");
+
+      await loadFoods();
+    } catch (e: any) {
+      setCreateError(e?.message ?? "Failed to create food");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  useEffect(() => {
+    loadFoods();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery]);
+
+  useEffect(() => {
+    loadToday();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const total = today?.totals ?? emptyTotals();
+
+  return (
+    <div className="page">
+      <header className="topbar">
+        <div className="topbarInner">
+          <div className="brand">
+            <div className="logoMark" aria-hidden="true" />
+            <div className="brandText">
+              <div className="brandName">CaloRight</div>
+              <div className="brandSub">Logged in as {user?.email ?? ""}</div>
+            </div>
+          </div>
+
+          <div className="topbarActions">
+            <div className="mealQuick">
+              <span className="mealQuickLabel">Add to</span>
+              <select
+                className="select compact"
+                value={logMealType}
+                onChange={(e) => setLogMealType(e.target.value as MealType)}
+              >
+                <option value="BREAKFAST">Breakfast</option>
+                <option value="LUNCH">Lunch</option>
+                <option value="DINNER">Dinner</option>
+                <option value="SNACKS">Snacks</option>
+              </select>
+            </div>
+
+            <Button variant="ghost" onClick={logout}>
+              Logout
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="container">
+        {/* Summary row */}
+        <section className="summaryCard card">
+          <div className="summaryHeader">
+            <div>
+              <div className="sectionTitle">Today</div>
+              <div className="sectionSub">
+                Track your meals and quickly add foods. Use the meal dropdown to choose where new items go.
+              </div>
+            </div>
+
+            <div className="summaryActions">
+              <Button variant="ghost" onClick={loadToday} disabled={todayLoading}>
+                {todayLoading ? "Refreshing…" : "Refresh"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="pillGrid">
+            <MacroPill label="Calories" value={total.calories} unit="kcal" />
+            <MacroPill label="Protein" value={total.protein} unit="g" />
+            <MacroPill label="Carbs" value={total.carbs} unit="g" />
+            <MacroPill label="Fat" value={total.fat} unit="g" />
+          </div>
+
+          <div className="alerts">
+            {todayError ? <InlineError text={todayError} /> : null}
+            {logError ? <InlineError text={logError} /> : null}
+            {!today && !todayError && !todayLoading ? <InlineInfo text="No log yet. Add something from Foods." /> : null}
+          </div>
+        </section>
+
+        {/* Main 2-column layout */}
+        <div className="grid">
+          {/* LEFT: Meals */}
+          <section className="card">
+            <div className="cardHeader">
+              <div>
+                <div className="sectionTitle">Meals</div>
+                <div className="sectionSub">Entries are grouped by meal type.</div>
+              </div>
+              <div className="rightMeta">
+                {today ? <Badge tone="blue" text={`${today.entries.length} item(s)`} /> : <Badge text="Empty" />}
+              </div>
+            </div>
+
+            <div className="cardBody stack">
+              {todayByMeal ? (
+                MEALS.map((meal) => (
+                  <MealCard
+                    key={meal}
+                    title={fmtMealTitle(meal)}
+                    totals={todayByMeal.totalsByMeal[meal]}
+                    entries={todayByMeal.entriesByMeal[meal]}
+                    deleteLoadingEntryId={deleteLoadingEntryId}
+                    onDeleteEntry={deleteEntry}
+                  />
+                ))
+              ) : (
+                <div className="emptyState">
+                  <div className="emptyTitle">Nothing logged yet</div>
+                  <div className="emptySub">Search foods on the right and add grams to log entries.</div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* RIGHT: Foods + Create */}
+          <aside className="side stack">
+            <section className="card">
+              <div className="cardHeader">
+                <div>
+                  <div className="sectionTitle">Foods</div>
+                  <div className="sectionSub">Search by name or brand, then add grams.</div>
+                </div>
+                <div className="rightMeta">
+                  {foodsLoading ? <Badge text="Loading…" /> : <Badge tone="green" text={`${foods.length} results`} />}
+                </div>
+              </div>
+
+              <div className="cardBody stack">
+                <form
+                  className="searchRow"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    loadFoods();
+                  }}
+                >
+                  <input
+                    className="input"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search foods (name or brand)…"
+                    aria-label="Search foods"
+                  />
+                  <Button variant="primary" type="submit" disabled={foodsLoading}>
+                    {foodsLoading ? "Searching…" : "Search"}
+                  </Button>
+                </form>
+
+                {foodsError ? <InlineError text={foodsError} /> : null}
+
+                <div className="foodList">
+                  {foods.map((f) => (
+                    <FoodListRow
+                      key={f.id}
+                      food={f}
+                      grams={gramsByFoodId[f.id] ?? ""}
+                      onChangeGrams={(v) => setGramsByFoodId((prev) => ({ ...prev, [f.id]: v }))}
+                      onAdd={() => addFoodToToday(f.id)}
+                      adding={logLoadingFoodId === f.id}
+                    />
+                  ))}
+
+                  {!foodsLoading && foods.length === 0 ? (
+                    <div className="emptyInline">No foods found. Try a different search.</div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="cardHeader">
+                <div>
+                  <div className="sectionTitle">Create food</div>
+                  <div className="sectionSub">Add your own custom food with macros per 100g.</div>
+                </div>
+                <div className="rightMeta">
+                  <Badge text="Custom" />
+                </div>
+              </div>
+
+              <div className="cardBody stack">
+                <form
+                  className="stack"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    createFood();
+                  }}
+                >
+                  <div className="twoCol">
+                    <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Greek yogurt" />
+                    <Input
+                      label="Brand (optional)"
+                      value={brand}
+                      onChange={(e) => setBrand(e.target.value)}
+                      placeholder="Kirkland"
+                    />
+                  </div>
+
+                  <div className="fourCol">
+                    <Input label="Calories/100g" inputMode="decimal" value={calories} onChange={(e) => setCalories(e.target.value)} placeholder="59" />
+                    <Input label="Protein/100g" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="10" />
+                    <Input label="Carbs/100g" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} placeholder="3.6" />
+                    <Input label="Fat/100g" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} placeholder="0.4" />
+                  </div>
+
+                  {createError ? <InlineError text={createError} /> : null}
+
+                  <div className="rowEnd">
+                    <Button variant="primary" type="submit" disabled={creating}>
+                      {creating ? "Creating…" : "Create food"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </aside>
+        </div>
+
+        <footer className="footerNote">
+          Tip: On mobile, the foods list scrolls within its card so you can still reach “Create food” easily.
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+/* ------------------------------ UI pieces ------------------------------ */
+
+function MealCard(props: {
+  title: string;
+  totals: { calories: number; protein: number; carbs: number; fat: number };
+  entries: Array<TodayLogResponse["log"]["entries"][number]>;
+  onDeleteEntry: (entryId: string) => void;
+  deleteLoadingEntryId: string | null;
+}) {
+  const t = props.totals;
+
+  return (
+    <div className="mealCard">
+      <div className="mealHeader">
+        <div className="mealTitleRow">
+          <h3 className="mealTitle">{props.title}</h3>
+          <div className="mealTotals">
+            <span className="mealKcal">
+              <strong>{t.calories}</strong> kcal
+            </span>
+            <span className="mealMacros">
+              P {t.protein} • C {t.carbs} • F {t.fat}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {props.entries.length === 0 ? (
+        <div className="emptyInline">No entries</div>
+      ) : (
+        <div className="entryList">
+          {props.entries.map((e) => (
+            <EntryRow
+              key={e.id}
+              entry={e}
+              onDelete={() => props.onDeleteEntry(e.id)}
+              deleting={props.deleteLoadingEntryId === e.id}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EntryRow(props: {
+  entry: TodayLogResponse["log"]["entries"][number];
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const e = props.entry;
+
+  return (
+    <div className="entryRow">
+      <div className="entryMain">
+        <div className="entryName">
+          <span className="truncate">{e.food ? e.food.name : "Item"}</span>
+          {e.food?.brand ? <span className="entryBrand"> • {e.food.brand}</span> : null}
+        </div>
+        <div className="entryMeta">
+          {e.grams}g • {e.calories} kcal • P {e.protein} • C {e.carbs} • F {e.fat}
+        </div>
+      </div>
+
+      <IconButton label="Delete entry" variant="danger" onClick={props.onDelete} disabled={props.deleting}>
+        {props.deleting ? "…" : "✕"}
+      </IconButton>
+    </div>
+  );
+}
+
+function FoodListRow(props: {
+  food: Food;
+  grams: string;
+  onChangeGrams: (v: string) => void;
+  onAdd: () => void;
+  adding: boolean;
+}) {
+  const f = props.food;
+  const isCustom = f.userId !== null;
+
+  return (
+    <div className="foodRow">
+      <div className="foodMain">
+        <div className="foodName">
+          <span className="truncate">{f.name}</span>
+          {f.brand ? <span className="foodBrand"> • {f.brand}</span> : null}
+        </div>
+
+        <div className="foodMeta">
+          {f.caloriesPer100g} kcal • P {f.proteinPer100g}g • C {f.carbsPer100g}g • F {f.fatPer100g}g{" "}
+          <span className="muted">(per 100g)</span>
+        </div>
+
+        <div className="foodBadges">
+          <Badge text={isCustom ? "Custom" : "Global"} tone={isCustom ? "blue" : "neutral"} />
+        </div>
+      </div>
+
+      <div className="foodActions">
+        <input
+          className="input grams"
+          value={props.grams}
+          onChange={(e) => props.onChangeGrams(e.target.value)}
+          placeholder="grams"
+          inputMode="decimal"
+          aria-label={`Grams for ${f.name}`}
+        />
+        <Button onClick={props.onAdd} disabled={props.adding} variant="primary">
+          {props.adding ? "Adding…" : "Add"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pages/Dashboard.css:
+:root {
+  --bg: #0b1220;
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface2: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.10);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.70);
+  --muted2: rgba(255, 255, 255, 0.55);
+  --shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  --radius: 16px;
+  --radiusSm: 12px;
+  --ring: 0 0 0 3px rgba(118, 188, 255, 0.25);
+
+  --primary: #76bcff;
+  --danger: #ff6b6b;
+  --ok: #4ade80;
+}
+
+* { box-sizing: border-box; }
+
+.page {
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(900px 500px at 20% -10%, rgba(118, 188, 255, 0.25), transparent 60%),
+    radial-gradient(900px 500px at 85% 10%, rgba(74, 222, 128, 0.16), transparent 55%),
+    linear-gradient(180deg, #070b14 0%, #0b1220 55%, #0b1220 100%);
+}
+
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 18px 14px 28px;
+}
+
+/* Top bar */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+  background: rgba(7, 11, 20, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.topbarInner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logoMark {
+  width: 34px; height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(118,188,255,0.9), rgba(74,222,128,0.75));
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+}
+.brandText { min-width: 0; }
+.brandName { font-weight: 900; letter-spacing: 0.2px; font-size: 18px; line-height: 1.1; }
+.brandSub { color: var(--muted2); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; }
+
+.topbarActions { display: flex; align-items: center; gap: 10px; }
+.mealQuick { display: flex; align-items: center; gap: 8px; }
+.mealQuickLabel { color: var(--muted2); font-size: 12px; }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.cardHeader {
+  padding: 14px 14px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardBody { padding: 14px; }
+
+.sectionTitle { font-weight: 900; font-size: 16px; }
+.sectionSub { color: var(--muted2); font-size: 12px; margin-top: 4px; }
+.rightMeta { display: flex; align-items: center; gap: 8px; }
+
+/* Summary */
+.summaryCard { margin-top: 12px; }
+.summaryHeader {
+  padding: 14px 14px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.summaryActions { display: flex; gap: 8px; align-items: center; }
+
+.pillGrid {
+  padding: 14px;
+  padding-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pill {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: var(--surface2);
+  border-radius: 14px;
+  padding: 12px;
+}
+.pillLabel { color: var(--muted2); font-size: 12px; }
+.pillValue { margin-top: 6px; font-size: 18px; font-weight: 900; letter-spacing: 0.2px; }
+.pillUnit { color: var(--muted); font-weight: 700; font-size: 12px; }
+
+.alerts { padding: 0 14px 14px; display: grid; gap: 10px; }
+.alert {
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+}
+.alertError { border-color: rgba(255, 107, 107, 0.35); background: rgba(255, 107, 107, 0.10); }
+.alertInfo { border-color: rgba(118, 188, 255, 0.30); background: rgba(118, 188, 255, 0.10); }
+
+/* Layout grid */
+.grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.side { position: sticky; top: 74px; } /* stays visible on desktop */
+.stack { display: grid; gap: 12px; }
+
+/* Fields */
+.field { display: grid; gap: 6px; }
+.fieldLabel { font-size: 12px; color: var(--muted); }
+.fieldHint { font-size: 11px; color: var(--muted2); }
+
+.input, .select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(7, 11, 20, 0.35);
+  color: var(--text);
+  padding: 10px 12px;
+  outline: none;
+}
+
+.select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) calc(1em + 2px), calc(100% - 13px) calc(1em + 2px); background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+.select.compact { padding: 8px 28px 8px 10px; border-radius: 12px; font-size: 13px; }
+
+.input:focus, .select:focus { box-shadow: var(--ring); border-color: rgba(118,188,255,0.45); }
+
+.searchRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Buttons */
+.btn {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn.primary {
+  background: linear-gradient(135deg, rgba(118,188,255,0.92), rgba(118,188,255,0.62));
+  border-color: rgba(118,188,255,0.40);
+  color: #0b1220;
+}
+.btn.ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.btn.danger {
+  background: rgba(255, 107, 107, 0.14);
+  border-color: rgba(255, 107, 107, 0.30);
+}
+
+.iconBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+}
+.iconBtn.danger {
+  background: rgba(255, 107, 107, 0.14);
+  border-color: rgba(255, 107, 107, 0.28);
+}
+.iconBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Badges */
+.badge {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+.badge.green { border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.12); }
+.badge.blue { border-color: rgba(118,188,255,0.25); background: rgba(118,188,255,0.12); }
+
+/* Meals */
+.mealCard {
+  border-radius: var(--radiusSm);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  padding: 12px;
+}
+
+.mealTitleRow {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.mealTitle { margin: 0; font-size: 15px; font-weight: 900; }
+.mealTotals { display: flex; gap: 10px; align-items: baseline; color: var(--muted); font-size: 12px; }
+.mealKcal { color: var(--text); }
+.mealMacros { color: var(--muted2); }
+
+.entryList { margin-top: 10px; display: grid; gap: 8px; }
+
+.entryRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(7, 11, 20, 0.25);
+}
+.entryMain { min-width: 0; }
+.entryName { font-weight: 900; font-size: 13px; }
+.entryBrand { font-weight: 600; color: var(--muted2); }
+.entryMeta { margin-top: 3px; font-size: 12px; color: var(--muted); }
+
+/* Foods */
+.foodList {
+  display: grid;
+  gap: 10px;
+  max-height: 46vh;
+  overflow: auto;
+  padding-right: 2px;
+}
+.foodRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(7, 11, 20, 0.22);
+}
+.foodMain { min-width: 0; }
+.foodName { font-weight: 900; font-size: 13px; }
+.foodBrand { font-weight: 600; color: var(--muted2); }
+.foodMeta { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.foodBadges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+.foodActions { display: flex; gap: 8px; align-items: center; }
+.input.grams { width: 92px; }
+
+.muted { color: var(--muted2); }
+
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.fourCol {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.rowEnd { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* Empty states */
+.emptyState {
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.04);
+}
+.emptyTitle { font-weight: 900; }
+.emptySub { margin-top: 6px; color: var(--muted2); font-size: 12px; }
+
+.emptyInline {
+  color: var(--muted2);
+  font-size: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.03);
+}
+
+/* Footer note */
+.footerNote {
+  margin-top: 14px;
+  color: var(--muted2);
+  font-size: 12px;
+  padding: 10px 2px;
+}
+
+/* Utilities */
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* Responsive */
+@media (max-width: 980px) {
+  .grid { grid-template-columns: 1fr; }
+  .side { position: static; }
+  .pillGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fourCol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .foodList { max-height: 44vh; }
+}
+
+@media (max-width: 520px) {
+  .topbarInner { flex-direction: column; align-items: stretch; }
+  .topbarActions { justify-content: space-between; width: 100%; }
+  .brandSub { max-width: 92vw; }
+
+  .pillGrid { grid-template-columns: 1fr; }
+  .twoCol { grid-template-columns: 1fr; }
+  .fourCol { grid-template-columns: 1fr; }
+
+  .foodRow { grid-template-columns: 1fr; }
+  .foodActions { justify-content: space-between; }
+  .input.grams { width: 42%; min-width: 120px; }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Dashboard.tsx 2:
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import type { Food, FoodsResponse } from "../lib/foodsApi";
+import type { TodayLogResponse } from "../lib/dailyLogsApi";
+
+import styles from "./Dashboard.module.css";
+
+type MealType = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACKS";
+const MEALS: MealType[] = ["BREAKFAST", "LUNCH", "DINNER", "SNACKS"];
+
+function emptyTotals() {
+  return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+}
+
+function fmtMeal(m: MealType) {
+  return m === "BREAKFAST" ? "Breakfast" : m === "LUNCH" ? "Lunch" : m === "DINNER" ? "Dinner" : "Snacks";
+}
+
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+
+  return debounced;
+}
+
+export default function Dashboard() {
+  const { user, logout, authedRequest } = useAuth();
+
+  // ---------- Foods search ----------
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+
+  const [foods, setFoods] = useState<Food[]>([]);
+  const [foodsLoading, setFoodsLoading] = useState(false);
+  const [foodsError, setFoodsError] = useState<string | null>(null);
+
+  // ---------- Create food ----------
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [brand, setBrand] = useState("");
+  const [calories, setCalories] = useState("");
+  const [protein, setProtein] = useState("");
+  const [carbs, setCarbs] = useState("");
+  const [fat, setFat] = useState("");
+
+  // ---------- Today log ----------
+  const [today, setToday] = useState<TodayLogResponse["log"] | null>(null);
+  const [todayLoading, setTodayLoading] = useState(false);
+  const [todayError, setTodayError] = useState<string | null>(null);
+
+  // ---------- Logging entry ----------
+  const [logMealType, setLogMealType] = useState<MealType>("LUNCH");
+  const [gramsByFoodId, setGramsByFoodId] = useState<Record<string, string>>({});
+  const [logError, setLogError] = useState<string | null>(null);
+  const [logLoadingFoodId, setLogLoadingFoodId] = useState<string | null>(null);
+
+  // ---------- Deleting entry ----------
+  const [deleteLoadingEntryId, setDeleteLoadingEntryId] = useState<string | null>(null);
+
+  // ---------- Derived memo helpers ----------
+  const todayByMeal = useMemo(() => {
+    if (!today) return null;
+
+    const entriesByMeal = {
+      BREAKFAST: today.entries.filter((e) => e.mealType === "BREAKFAST"),
+      LUNCH: today.entries.filter((e) => e.mealType === "LUNCH"),
+      DINNER: today.entries.filter((e) => e.mealType === "DINNER"),
+      SNACKS: today.entries.filter((e) => e.mealType === "SNACKS"),
+    } satisfies Record<MealType, typeof today.entries>;
+
+    const totalsByMeal = {
+      BREAKFAST: today.meals?.BREAKFAST ?? emptyTotals(),
+      LUNCH: today.meals?.LUNCH ?? emptyTotals(),
+      DINNER: today.meals?.DINNER ?? emptyTotals(),
+      SNACKS: today.meals?.SNACKS ?? emptyTotals(),
+    } satisfies Record<MealType, ReturnType<typeof emptyTotals>>;
+
+    return { entriesByMeal, totalsByMeal };
+  }, [today]);
+
+  // ---------- API calls ----------
+  async function loadFoods() {
+    setFoodsLoading(true);
+    setFoodsError(null);
+    try {
+      const qs = debouncedQuery ? `?query=${encodeURIComponent(debouncedQuery)}` : "";
+      const data = await authedRequest<FoodsResponse>(`/foods${qs}`);
+      setFoods(data.foods);
+    } catch (e: any) {
+      setFoodsError(e?.message ?? "Failed to load foods");
+    } finally {
+      setFoodsLoading(false);
+    }
+  }
+
+  async function loadToday() {
+    setTodayLoading(true);
+    setTodayError(null);
+    try {
+      const data = await authedRequest<TodayLogResponse>("/daily-logs/today");
+      setToday(data.log);
+    } catch (e: any) {
+      setTodayError(e?.message ?? "Failed to load today log");
+    } finally {
+      setTodayLoading(false);
+    }
+  }
+
+  async function addFoodToToday(foodId: string) {
+    setLogError(null);
+
+    const gramsStr = (gramsByFoodId[foodId] ?? "").trim();
+    const grams = Number(gramsStr);
+
+    if (!gramsStr || Number.isNaN(grams) || grams <= 0) {
+      setLogError("Enter grams > 0 before adding.");
+      return;
+    }
+
+    setLogLoadingFoodId(foodId);
+    try {
+      let logId = today?.id;
+      if (!logId) {
+        const data = await authedRequest<{ log: { id: string } }>("/daily-logs/today");
+        logId = data.log.id;
+        await loadToday();
+      }
+
+      await authedRequest(`/daily-logs/${logId}/entries`, {
+        method: "POST",
+        body: { foodId, grams, mealType: logMealType },
+      });
+
+      setGramsByFoodId((prev) => {
+        const copy = { ...prev };
+        delete copy[foodId];
+        return copy;
+      });
+
+      await loadToday();
+    } catch (e: any) {
+      setLogError(e?.message ?? "Failed to add entry");
+    } finally {
+      setLogLoadingFoodId(null);
+    }
+  }
+
+  async function deleteEntry(entryId: string) {
+    if (!today) return;
+
+    setDeleteLoadingEntryId(entryId);
+    try {
+      await authedRequest(`/daily-logs/${today.id}/entries/${entryId}`, { method: "DELETE" });
+      await loadToday();
+    } finally {
+      setDeleteLoadingEntryId(null);
+    }
+  }
+
+  async function createFood() {
+    setCreateError(null);
+
+    const payload = {
+      name: name.trim(),
+      brand: brand.trim() ? brand.trim() : null,
+      caloriesPer100g: Number(calories),
+      proteinPer100g: Number(protein),
+      carbsPer100g: Number(carbs),
+      fatPer100g: Number(fat),
+    };
+
+    if (!payload.name) return setCreateError("Name is required.");
+    if (
+      [payload.caloriesPer100g, payload.proteinPer100g, payload.carbsPer100g, payload.fatPer100g].some((n) =>
+        Number.isNaN(n)
+      )
+    ) {
+      return setCreateError("All macros must be numbers.");
+    }
+
+    setCreating(true);
+    try {
+      await authedRequest("/foods", { method: "POST", body: payload });
+
+      setName("");
+      setBrand("");
+      setCalories("");
+      setProtein("");
+      setCarbs("");
+      setFat("");
+
+      await loadFoods();
+    } catch (e: any) {
+      setCreateError(e?.message ?? "Failed to create food");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  useEffect(() => {
+    loadFoods();
+  }, [debouncedQuery]);
+
+  useEffect(() => {
+    loadToday();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const foodsCountLabel = foodsLoading ? "Loading…" : `${foods.length} result(s)`;
+
+  return (
+    <div className={styles.page}>
+      <header className={styles.topbar}>
+        <div className={styles.brand}>
+          <div className={styles.logo} aria-hidden />
+          <div className={styles.brandText}>
+            <h1 className={styles.title}>CaloRight</h1>
+            <div className={styles.subtitle}>
+              Logged in as <span className={styles.mono}>{user?.email ?? ""}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.topbarActions}>
+          <button className={styles.ghostBtn} onClick={loadToday} disabled={todayLoading} type="button">
+            {todayLoading ? "Refreshing…" : "Refresh"}
+          </button>
+          <button className={styles.dangerBtn} onClick={logout} type="button">
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <main className={styles.mainGrid}>
+        {/* LEFT: Today */}
+        <section className={styles.card}>
+          <div className={styles.cardHeader}>
+            <div>
+              <h2 className={styles.cardTitle}>Today</h2>
+              <div className={styles.cardHint}>Auto totals + categorized meals</div>
+            </div>
+
+            <div className={styles.controlsRow}>
+              <label className={styles.selectWrap}>
+                <span className={styles.srOnly}>Meal type</span>
+                <select
+                  className={styles.select}
+                  value={logMealType}
+                  onChange={(e) => setLogMealType(e.target.value as MealType)}
+                >
+                  <option value="BREAKFAST">Breakfast</option>
+                  <option value="LUNCH">Lunch</option>
+                  <option value="DINNER">Dinner</option>
+                  <option value="SNACKS">Snacks</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          {todayError ? <InlineError text={todayError} /> : null}
+          {logError ? <InlineError text={logError} /> : null}
+
+          {!today && !todayError ? (
+            <div className={styles.emptyState}>No log yet.</div>
+          ) : null}
+
+          {today ? (
+            <>
+              <TotalsStrip totals={today.totals} />
+
+              <div className={styles.mealsGrid}>
+                {MEALS.map((meal) => {
+                  const entries = today.entries.filter((e) => e.mealType === meal);
+                  const totals = today.meals?.[meal] ?? emptyTotals();
+
+                  return (
+                    <div key={meal} className={styles.mealCard}>
+                      <div className={styles.mealHeader}>
+                        <h3 className={styles.mealTitle}>{fmtMeal(meal)}</h3>
+                        <div className={styles.mealTotals}>
+                          <strong>{totals.calories}</strong> kcal • P {round1(totals.protein)} • C {round1(totals.carbs)} • F{" "}
+                          {round1(totals.fat)}
+                        </div>
+                      </div>
+
+                      {entries.length === 0 ? (
+                        <div className={styles.mealEmpty}>No entries</div>
+                      ) : (
+                        <div className={styles.entriesList}>
+                          {entries.map((e) => (
+                            <div key={e.id} className={styles.entryRow}>
+                              <div className={styles.entryMain}>
+                                <div className={styles.entryTitle} title={e.food?.name ?? "Item"}>
+                                  {e.food ? e.food.name : "Item"}
+                                  {e.food?.brand ? <span className={styles.muted}> • {e.food.brand}</span> : null}
+                                </div>
+                                <div className={styles.entryMeta}>
+                                  {e.grams}g • {e.calories} kcal • P {round1(e.protein)} • C {round1(e.carbs)} • F{" "}
+                                  {round1(e.fat)}
+                                </div>
+                              </div>
+
+                              <button
+                                className={styles.ghostBtn}
+                                onClick={() => deleteEntry(e.id)}
+                                disabled={deleteLoadingEntryId === e.id}
+                                type="button"
+                              >
+                                {deleteLoadingEntryId === e.id ? "Deleting…" : "Delete"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
+        </section>
+
+        {/* RIGHT: Foods + Create */}
+        <section className={styles.stack}>
+          <section className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div>
+                <h2 className={styles.cardTitle}>Foods</h2>
+                <div className={styles.cardHint}>
+                  Adding to <strong>{fmtMeal(logMealType)}</strong>
+                </div>
+              </div>
+
+              <div className={styles.badge}>{foodsCountLabel}</div>
+            </div>
+
+            <div className={styles.searchRow}>
+              <input
+                className={styles.input}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search foods (name or brand)…"
+              />
+              <button className={styles.primaryBtn} onClick={loadFoods} disabled={foodsLoading} type="button">
+                {foodsLoading ? "Loading…" : "Search"}
+              </button>
+            </div>
+
+            {foodsError ? <InlineError text={foodsError} /> : null}
+
+            <div className={styles.foodsList}>
+              {foods.map((f) => {
+                const isCustom = f.userId !== null;
+                return (
+                  <div key={f.id} className={styles.foodRow}>
+                    <div className={styles.foodMain}>
+                      <div className={styles.foodTitle} title={f.name}>
+                        {f.name}
+                        {f.brand ? <span className={styles.muted}> • {f.brand}</span> : null}
+                      </div>
+
+                      <div className={styles.foodMeta}>
+                        {f.caloriesPer100g} kcal • P {round1(f.proteinPer100g)}g • C {round1(f.carbsPer100g)}g • F{" "}
+                        {round1(f.fatPer100g)}g <span className={styles.muted}>(per 100g)</span>
+                      </div>
+
+                      <div className={styles.foodPills}>
+                        <span className={isCustom ? styles.pillCustom : styles.pillGlobal}>{isCustom ? "Custom" : "Global"}</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.foodActions}>
+                      <input
+                        className={styles.inputSmall}
+                        value={gramsByFoodId[f.id] ?? ""}
+                        onChange={(e) => setGramsByFoodId((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                        placeholder="grams"
+                        inputMode="decimal"
+                      />
+                      <button
+                        className={styles.primaryBtn}
+                        onClick={() => addFoodToToday(f.id)}
+                        disabled={logLoadingFoodId === f.id}
+                        type="button"
+                      >
+                        {logLoadingFoodId === f.id ? "Adding…" : "Add"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div>
+                <h2 className={styles.cardTitle}>Create food</h2>
+                <div className={styles.cardHint}>Adds a custom entry to your foods list</div>
+              </div>
+            </div>
+
+            <div className={styles.formGrid}>
+              <label className={styles.field}>
+                <span className={styles.label}>Name</span>
+                <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Greek yogurt" />
+              </label>
+
+              <label className={styles.field}>
+                <span className={styles.label}>Brand (optional)</span>
+                <input className={styles.input} value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="e.g., Kirkland" />
+              </label>
+
+              <div className={styles.macroGrid}>
+                <label className={styles.field}>
+                  <span className={styles.label}>Calories / 100g</span>
+                  <input className={styles.input} value={calories} onChange={(e) => setCalories(e.target.value)} placeholder="59" inputMode="decimal" />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>Protein / 100g</span>
+                  <input className={styles.input} value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="10" inputMode="decimal" />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>Carbs / 100g</span>
+                  <input className={styles.input} value={carbs} onChange={(e) => setCarbs(e.target.value)} placeholder="3.6" inputMode="decimal" />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>Fat / 100g</span>
+                  <input className={styles.input} value={fat} onChange={(e) => setFat(e.target.value)} placeholder="0.4" inputMode="decimal" />
+                </label>
+              </div>
+
+              {createError ? <InlineError text={createError} /> : null}
+
+              <button className={styles.primaryBtn} onClick={createFood} disabled={creating} type="button">
+                {creating ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      {/* tiny footer spacing */}
+      <div className={styles.footerSpace} />
+    </div>
+  );
+}
+
+/* ------------------------------ Presentational ------------------------------ */
+
+function TotalsStrip(props: { totals: { calories: number; protein: number; carbs: number; fat: number } }) {
+  const t = props.totals;
+  return (
+    <div className={styles.totalsStrip}>
+      <Stat label="Calories" value={`${t.calories} kcal`} />
+      <Stat label="Protein" value={`${round1(t.protein)} g`} />
+      <Stat label="Carbs" value={`${round1(t.carbs)} g`} />
+      <Stat label="Fat" value={`${round1(t.fat)} g`} />
+    </div>
+  );
+}
+
+function Stat(props: { label: string; value: string }) {
+  return (
+    <div className={styles.stat}>
+      <div className={styles.statLabel}>{props.label}</div>
+      <div className={styles.statValue}>{props.value}</div>
+    </div>
+  );
+}
+
+function InlineError(props: { text: string }) {
+  return (
+    <div className={styles.errorBox} role="alert">
+      {props.text}
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Dashboard.module.css:
+:root {
+  --bg0: #0b0f17;
+  --bg1: #0f172a;
+  --card: rgba(255, 255, 255, 0.06);
+  --card2: rgba(255, 255, 255, 0.08);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.66);
+  --border: rgba(255, 255, 255, 0.12);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --radius: 18px;
+
+  --primary: #7c3aed;
+  --primary2: #22c55e;
+  --danger: #ef4444;
+
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.page {
+  min-height: 100vh;
+  background: radial-gradient(1200px 600px at 15% 10%, rgba(124, 58, 237, 0.28), transparent 60%),
+    radial-gradient(1000px 600px at 80% 0%, rgba(34, 197, 94, 0.18), transparent 55%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+  color: var(--text);
+  font-family: var(--sans);
+}
+
+.topbar {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 16px 10px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.9), rgba(34, 197, 94, 0.85));
+  box-shadow: var(--shadow);
+  flex: 0 0 auto;
+}
+
+.brandText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: 0.2px;
+}
+
+.subtitle {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.topbarActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.mainGrid {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 10px 16px 0;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 16px;
+}
+
+@media (max-width: 980px) {
+  .mainGrid {
+    grid-template-columns: 1fr;
+  }
+  .topbar {
+    flex-wrap: wrap;
+  }
+}
+
+.card {
+  background: linear-gradient(180deg, var(--card), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  backdrop-filter: blur(10px);
+}
+
+.stack {
+  display: grid;
+  gap: 16px;
+}
+
+.cardHeader {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.2px;
+}
+
+.cardHint {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.controlsRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.badge {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+}
+
+.searchRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 520px) {
+  .searchRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  outline: none;
+}
+
+.input:focus {
+  border-color: rgba(124, 58, 237, 0.8);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+}
+
+.inputSmall {
+  width: 92px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  outline: none;
+}
+
+.selectWrap {
+  display: grid;
+}
+
+.select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  outline: none;
+}
+
+.primaryBtn,
+.ghostBtn,
+.dangerBtn {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.primaryBtn {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.95), rgba(124, 58, 237, 0.7));
+  color: white;
+  box-shadow: 0 10px 24px rgba(124, 58, 237, 0.25);
+}
+
+.primaryBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ghostBtn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.ghostBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dangerBtn {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.totalsStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 720px) {
+  .totalsStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.stat {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.statValue {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.mealsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .mealsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mealCard {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+}
+
+.mealHeader {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.mealTitle {
+  margin: 0;
+  font-size: 14px;
+}
+
+.mealTotals {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mealEmpty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 0 2px;
+}
+
+.entriesList {
+  display: grid;
+  gap: 8px;
+}
+
+.entryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.entryMain {
+  min-width: 0;
+}
+
+.entryTitle {
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entryMeta {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.foodsList {
+  display: grid;
+  gap: 10px;
+}
+
+.foodRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 520px) {
+  .foodRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.foodMain {
+  min-width: 0;
+}
+
+.foodTitle {
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.foodMeta {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.foodPills {
+  margin-top: 8px;
+}
+
+.pillCustom,
+.pillGlobal {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.pillCustom {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.pillGlobal {
+  border-color: rgba(124, 58, 237, 0.3);
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.foodActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+@media (max-width: 520px) {
+  .foodActions {
+    justify-content: flex-end;
+  }
+}
+
+.formGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.macroGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .macroGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.errorBox {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+}
+
+.emptyState {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.muted {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.footerSpace {
+  height: 18px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

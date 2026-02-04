@@ -1,74 +1,153 @@
 # CaloRight
 
-CaloRight is a full-stack calorie, macro, and weight tracking web application.
+CaloRight is a full-stack calorie and macronutrient tracking web application that allows users to log foods, track daily nutrition totals, and review historical logs by date.
 
-This repository contains the frontend, backend API, and shared types used across the application.
+The application supports user authentication, custom food management, and per-day meal tracking with aggregated macro calculations.
 
 ---
 
-## Tech Stack (Planned)
+## Features (MVP)
 
-- **Frontend:** React + TypeScript + Vite
-  
-- **Backend:** Node.js + Express + TypeScript
-  
-- **Database:** PostgreSQL
-  
-- **ORM:** Prisma
-  
-- **Auth:** JWT (access tokens + refresh tokens)
-  
-- **Infra:** Docker (local), cloud deployment later
+* User authentication with JWT access and refresh tokens
+* Daily calorie and macronutrient tracking
+* Browse and search a global food database
+* Create, edit, and delete custom foods
+* Log foods by meal (Breakfast, Lunch, Dinner, Snacks)
+* View and edit logs for any date
+* Automatic daily macro totals and per-meal breakdowns
+
+---
+
+## Tech Stack
+
+### Frontend
+
+* React
+* TypeScript
+* Vite
+* Custom CSS
+
+### Backend
+
+* Node.js
+* Express
+* TypeScript
+* Prisma ORM
+
+### Database
+
+* PostgreSQL
+
+### Authentication
+
+* JWT (access and refresh tokens)
+* Secure, HTTP-only refresh token cookies
+
+### Infrastructure (Local)
+
+* Docker Compose (PostgreSQL)
+* Environment-based configuration
 
 ---
 
 ## Repository Structure
 
+```
 caloright/
-
-  apps/
-  
-    api/ # Backend API (Express)
-    
-    web/ # Frontend web app (React)
-    
-  packages/
-  
-    shared/ # Shared types and validation schemas
-    
-  docs/ # Architecture diagrams and screenshots
-  
-  docker-compose.yml
+├─ apps/
+│  ├─ api/          # Backend API (Express + Prisma)
+│  └─ web/          # Frontend web app (React + Vite)
+├─ packages/
+│  └─ shared/       # Shared types and utilities
+├─ docs/            # Architecture notes and assets
+└─ docker-compose.yml
+```
 
 ---
 
 ## Local Development
 
->Clone repo
+### Prerequisites
 
->npm install in apps/api and apps/web
+* Node.js (v18+ recommended)
+* Docker & Docker Compose
+* PostgreSQL client (optional)
 
->Copy .env.example → .env
+### Setup
 
->Fill env vars
+1. Clone the repository
 
->docker compose up -d
+   ```bash
+   git clone https://github.com/your-username/caloright.git
+   cd caloright
+   ```
 
->npx prisma generate in apps/api
+2. Install dependencies
 
->npx prisma migrate deploy in apps/api
+   ```bash
+   cd apps/api && npm install
+   cd ../web && npm install
+   ```
 
->npx prisma db seed in apps/api
+3. Configure environment variables
 
->npm run dev in apps/web and apps/api
+   ```bash
+   cp apps/api/.env.example apps/api/.env
+   cp apps/web/.env.example apps/web/.env
+   ```
+
+4. Start the database
+
+   ```bash
+   docker compose up -d
+   ```
+
+5. Prepare the database (from `apps/api`)
+
+   ```bash
+   npx prisma generate
+   npx prisma migrate deploy
+   npx prisma db seed
+   ```
+
+6. Start the development servers
+
+   ```bash
+   # in apps/api
+   npm run dev
+
+   # in apps/web
+   npm run dev
+   ```
+
+Frontend runs on `http://localhost:5173`
+Backend API runs on `http://localhost:3001`
+
+---
+
+## Environment Configuration
+
+Example environment files are provided:
+
+* `apps/api/.env.example`
+* `apps/web/.env.example`
+
+These document the required configuration for both local development and production deployment.
 
 ---
 
 ## Project Status
 
-🚧 **Work in progress**
+✅ **MVP complete**
 
-This project is under active development. Features, structure, and documentation will evolve as the app is built.
+Core functionality is implemented and stable. Future improvements may include:
+
+* Weight tracking
+* Nutrition goals
+* Data visualization
+* Recipes feature
+* Mobile support
+* Cloud deployment
 
 ---
 
