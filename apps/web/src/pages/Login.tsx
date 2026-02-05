@@ -43,11 +43,14 @@ export default function Login() {
   }
 
   return (
+    
     <div className="loginPage">
       <div className="loginBg" aria-hidden="true" />
       <main className="loginWrap">
         <div className="loginBrand">
-          <div className="loginLogo" aria-hidden="true" />
+          <div className="brand">
+            <img src="/logo.svg" alt="CaloRight logo" className="logo" />
+          </div>
           <div className="loginBrandText">
             <div className="loginBrandName">CaloRight</div>
             <div className="loginBrandSub">Meal tracking made simple.</div>

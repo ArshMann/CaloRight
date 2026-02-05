@@ -431,10 +431,12 @@ export default function Dashboard() {
       <header className="topbar">
         <div className="topbarInner">
           <div className="brand">
-            <div className="logoMark" aria-hidden="true" />
-            <div className="brandText">
-              <div className="brandName">CaloRight</div>
-              <div className="brandSub">Logged in as {user?.email ?? ""}</div>
+            <div className="brand">
+              <img src="/logo.svg" alt="CaloRight logo" className="logo" />
+              <div className="brandText">
+                <div className="brandName">CaloRight</div>
+                <div className="brandSub">Logged in as {user?.email ?? ""}</div>
+              </div>
             </div>
           </div>
 

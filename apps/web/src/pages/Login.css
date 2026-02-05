@@ -197,6 +197,13 @@
   font-size: 12px;
 }
 
+.logo {
+  width: clamp(72px, 6vw, 108px);
+  height: auto;
+  max-height: 108px;
+  object-fit: contain;
+}
+
 @media (max-width: 520px) {
   .loginWrap { padding: 26px 14px 22px; }
   .loginCard { padding: 16px; }
