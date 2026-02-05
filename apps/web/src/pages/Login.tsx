@@ -10,8 +10,8 @@ export default function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const isLogin = mode === "login";
 
-  const [email, setEmail] = useState("test@email.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
