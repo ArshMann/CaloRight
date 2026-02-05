@@ -1,5 +1,3 @@
-import type { User } from "./authApi";
-
 export type Food = {
   id: string;
   name: string;
