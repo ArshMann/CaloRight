@@ -849,8 +849,33 @@ function FoodListRow(props: {
         </div>
 
         <div className="foodMeta">
-          {f.caloriesPer100g} kcal • P {f.proteinPer100g}g • C {f.carbsPer100g}g • F {f.fatPer100g}g{" "}
-          <span className="muted">(per 100g)</span>
+          <div className="foodMetaRow">
+            <span className="kcalChip">
+              <span className="kcalNum">{f.caloriesPer100g}</span>
+              <span className="kcalUnit">kcal</span>
+              <span className="kcalBase"> / 100g</span>
+            </span>
+          </div>
+
+          <div className="macroChips" aria-label="Macros per 100 grams">
+            <span className="macroChip">
+              <span className="macroKey">P</span>
+              <span className="macroVal">{f.proteinPer100g}</span>
+              <span className="macroUnit">g</span>
+            </span>
+
+            <span className="macroChip">
+              <span className="macroKey">C</span>
+              <span className="macroVal">{f.carbsPer100g}</span>
+              <span className="macroUnit">g</span>
+            </span>
+
+            <span className="macroChip">
+              <span className="macroKey">F</span>
+              <span className="macroVal">{f.fatPer100g}</span>
+              <span className="macroUnit">g</span>
+            </span>
+          </div>
         </div>
 
         <div className="foodBadges">
