@@ -431,12 +431,10 @@ export default function Dashboard() {
       <header className="topbar">
         <div className="topbarInner">
           <div className="brand">
-            <div className="brand">
-              <img src="/logo.svg" alt="CaloRight logo" className="logo" />
-              <div className="brandText">
-                <div className="brandName">CaloRight</div>
-                <div className="brandSub">Logged in as {user?.email ?? ""}</div>
-              </div>
+            <img src="/logo.svg" alt="CaloRight logo" className="logo" />
+            <div className="brandText">
+              <div className="brandName">CaloRight</div>
+              <div className="brandSub">Logged in as {user?.email ?? ""}</div>
             </div>
           </div>
 
@@ -548,6 +546,7 @@ export default function Dashboard() {
                   <div className="sectionTitle">Foods</div>
                   <div className="sectionSub">Search by name or brand, then add grams.</div>
                 </div>
+
                 <div className="rightMeta">
                   <div className="mealQuick">
                     <span className="mealQuickLabel">Add to</span>
@@ -632,12 +631,7 @@ export default function Dashboard() {
                   }}
                 >
                   <div className="twoCol">
-                    <Input
-                      label="Name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Greek yogurt"
-                    />
+                    <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Greek yogurt" />
                     <Input
                       label="Brand (optional)"
                       value={brand}
@@ -864,29 +858,31 @@ function FoodListRow(props: {
         </div>
       </div>
 
-      <div className="foodActions">
-        <input
-          className="input grams"
-          value={props.grams}
-          onChange={(e) => props.onChangeGrams(e.target.value)}
-          placeholder="grams"
-          inputMode="decimal"
-          aria-label={`Grams for ${f.name}`}
-        />
+      <div className="foodActions" style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
+          <input
+            className="input grams"
+            value={props.grams}
+            onChange={(e) => props.onChangeGrams(e.target.value)}
+            placeholder="grams"
+            inputMode="decimal"
+            aria-label={`Grams for ${f.name}`}
+          />
 
-        <Button onClick={props.onAdd} disabled={props.adding} variant="primary">
-          {props.adding ? "Adding…" : "Add"}
-        </Button>
+          <Button onClick={props.onAdd} disabled={props.adding} variant="primary">
+            {props.adding ? "Adding…" : "Add"}
+          </Button>
+        </div>
 
         {isCustom ? (
-          <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
             <IconButton label="Edit food" onClick={props.onEdit}>
               ✎
             </IconButton>
             <IconButton label="Delete food" variant="danger" onClick={props.onDelete} disabled={props.deleting}>
               {props.deleting ? "…" : "✕"}
             </IconButton>
-          </>
+          </div>
         ) : null}
       </div>
     </div>
