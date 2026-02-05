@@ -316,8 +316,6 @@
 .foodMeta { margin-top: 4px; font-size: 12px; color: var(--muted); }
 .foodBadges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* Note: if you switched Food actions to a 2x2 grid in Dashboard.tsx, keep these.
-   If not used yet, they won't affect anything. */
 .foodActions {
   display: grid;
   grid-template-columns: minmax(92px, 1fr) auto;
@@ -420,7 +418,6 @@
   .topbarInner { padding: 6px 12px; }
 }
 
-/* Keep your "topbar stays in one row" mobile fix */
 @media (max-width: 520px) {
   .topbarInner {
     flex-direction: row;
@@ -461,7 +458,6 @@
     border-radius: 10px;
   }
 
-  /* Foods header right-side wraps cleanly on very small screens */
   .rightMeta { gap: 10px; row-gap: 8px; }
 }
 

@@ -857,25 +857,22 @@ function FoodListRow(props: {
           <Badge text={isCustom ? "Custom" : "Global"} tone={isCustom ? "blue" : "neutral"} />
         </div>
       </div>
+      <div className="foodActions">
+        <input
+          className="input grams"
+          value={props.grams}
+          onChange={(e) => props.onChangeGrams(e.target.value)}
+          placeholder="grams"
+          inputMode="decimal"
+          aria-label={`Grams for ${f.name}`}
+        />
 
-      <div className="foodActions" style={{ display: "grid", gap: 8 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
-          <input
-            className="input grams"
-            value={props.grams}
-            onChange={(e) => props.onChangeGrams(e.target.value)}
-            placeholder="grams"
-            inputMode="decimal"
-            aria-label={`Grams for ${f.name}`}
-          />
-
-          <Button onClick={props.onAdd} disabled={props.adding} variant="primary">
-            {props.adding ? "Adding…" : "Add"}
-          </Button>
-        </div>
+        <Button onClick={props.onAdd} disabled={props.adding} variant="primary">
+          {props.adding ? "Adding…" : "Add"}
+        </Button>
 
         {isCustom ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
+          <div className="foodActionRow2">
             <IconButton label="Edit food" onClick={props.onEdit}>
               ✎
             </IconButton>
